@@ -7,9 +7,9 @@ const Canvas = () => {
   const canvasRef = useRef(null);
   const battle = {
     initiated: false,
+    introAnimated: false,
   };
   const overlayDivRef = useRef(null);
-  console.log(gsap);
 
   useEffect(() => {
     const image = new Image();
@@ -209,14 +209,19 @@ const Canvas = () => {
       let moving = true;
       player.moving = false;
 
-      if (battle.initiated) {
+      if (battle.initiated && !battle.introAnimated) {
+        // TODO: Animate exit
+        battle.introAnimated = true;
+
         gsap.to(overlayDivRef.current, {
           opacity: 1,
           repeat: 4,
           duration: 0.4,
-          yoyo: true,
           onComplete: () => {
-            return;
+            gsap.to(overlayDivRef.current, {
+              opacity: 0,
+              duration: 0.4,
+            });
           },
         });
       }
@@ -251,6 +256,7 @@ const Canvas = () => {
             //battle.initiated seems to stop movement on the SECOND trigger of a battle for some reason.
             console.log("Activate Battle");
             battle.initiated = true;
+            battle.introAnimated = false;
             break;
           }
         }
