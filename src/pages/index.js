@@ -1,123 +1,426 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import { Inter } from '@next/font/google'
-import styles from '@/styles/Home.module.css'
+import React, { useRef, useEffect, use } from "react";
+import { collisions } from "Assets/Assets Final/Collisions/marshlandCollisions";
+import { encountersData } from "Assets/Assets Final/Collisions/marshlandEncounters";
+import { gsap } from "gsap";
 
-const inter = Inter({ subsets: ['latin'] })
+const Canvas = () => {
+  const canvasRef = useRef(null);
+  const battle = {
+    initiated: false,
+  };
+  const overlayDivRef = useRef(null);
+  console.log(gsap);
 
-export default function Home() {
+  useEffect(() => {
+    const image = new Image();
+    image.src = "/Zones/Marshland Zone.png";
+    const playerImageDown = new Image();
+    playerImageDown.src = "/Characters/NerdForward.png";
+    const playerImageUp = new Image();
+    playerImageUp.src = "/Characters/NerdAway.png";
+    const playerImageRight = new Image();
+    playerImageRight.src = "/Characters/NerdRight.png";
+    const playerImageLeft = new Image();
+    playerImageLeft.src = "/Characters/NerdLeft.png";
+    const foregroundImage = new Image();
+    foregroundImage.src = "/Zones/marshlandForeground.png";
+
+    const canvas = canvasRef.current;
+    const c = canvas.getContext("2d");
+
+    const movables = [];
+    const collisionsMap = [];
+    for (let i = 0; i < collisions.length; i += 60) {
+      collisionsMap.push(collisions.slice(i, i + 60));
+    }
+    const encountersMap = [];
+    for (let i = 0; i < encountersData.length; i += 60) {
+      encountersMap.push(encountersData.slice(i, i + 60));
+    }
+    const offset = {
+      x: -355,
+      y: -260,
+    };
+
+    //**CUT CLASSES TO NEW FILE */
+    class Boundary {
+      static width = 32;
+      static height = 32;
+      constructor({ position }) {
+        this.position = position;
+        this.width = 32;
+        this.height = 32;
+      }
+      draw() {
+        c.fillStyle = "rgba(255,0,0,0.5)";
+        c.fillRect(this.position.x, this.position.y, this.width, this.height);
+      }
+    }
+
+    class Sprite {
+      constructor({ position, velocity, image, frames = { max: 1 }, sprites }) {
+        this.position = position;
+        this.image = image;
+        this.frames = { ...frames, val: 0, elapsed: 0 };
+        this.sprites = sprites;
+
+        this.image.onload = () => {
+          this.width = this.image.width / this.frames.max;
+          this.height = this.image.height;
+        };
+        this.moving = false;
+      }
+
+      draw() {
+        c.drawImage(
+          this.image,
+          this.frames.val * this.width,
+          0,
+          this.image.width / this.frames.max,
+          this.image.height,
+          this.position.x,
+          this.position.y,
+          this.image.width / this.frames.max,
+          this.image.height
+        );
+        if (this.frames.max > 1) {
+          this.frames.elapsed++;
+        }
+        if (!this.moving) return;
+        if (this.frames.elapsed % 10 === 0) {
+          if (this.frames.val < this.frames.max - 1) {
+            this.frames.val++;
+            this.frames.elapsed = 0;
+          } else {
+            this.frames.val = 0;
+            this.frames.elapsed = 0;
+          }
+        }
+      }
+    }
+    //**CUT CLASSES TO NEW FILE */
+
+    const boundaries = [];
+    collisionsMap.forEach((row, i) => {
+      row.forEach((symbol, j) => {
+        if (symbol === 6973) {
+          boundaries.push(
+            new Boundary({
+              position: {
+                x: j * Boundary.width + offset.x,
+                y: i * Boundary.height + offset.y,
+              },
+            })
+          );
+        }
+      });
+    });
+    movables.push(...boundaries);
+
+    const encounters = [];
+    encountersMap.forEach((row, i) => {
+      row.forEach((symbol, j) => {
+        if (symbol === 6755 || symbol === 6947) {
+          encounters.push(
+            new Boundary({
+              position: {
+                x: j * Boundary.width + offset.x,
+                y: i * Boundary.height + offset.y,
+              },
+            })
+          );
+        }
+      });
+    });
+    movables.push(...encounters);
+    console.log(encounters);
+
+    const keys = {
+      w: {
+        pressed: false,
+      },
+      a: {
+        pressed: false,
+      },
+      s: {
+        pressed: false,
+      },
+      d: {
+        pressed: false,
+      },
+    };
+
+    const player = new Sprite({
+      position: {
+        x: canvas.width / 2 - 96 / 4 / 2,
+        y: canvas.height / 2 - 32 / 2,
+      },
+      image: playerImageDown,
+      frames: {
+        max: 3,
+      },
+      sprites: {
+        up: playerImageUp,
+        down: playerImageDown,
+        left: playerImageLeft,
+        right: playerImageRight,
+      },
+    });
+
+    const background = new Sprite({
+      position: {
+        x: offset.x,
+        y: offset.y,
+      },
+      image: image,
+    });
+    movables.push(background);
+
+    const foreground = new Sprite({
+      position: {
+        x: offset.x,
+        y: offset.y,
+      },
+      image: foregroundImage,
+    });
+    movables.push(foreground);
+
+    function rectangularCollision({ rect1, rect2 }) {
+      return (
+        rect1.position.x + rect1.width >= rect2.position.x &&
+        rect1.position.x <= rect2.position.x + rect2.width &&
+        rect1.position.y <= rect2.position.y + rect2.height &&
+        rect1.position.y + rect1.height >= rect2.position.y
+      );
+    }
+
+    function Animate() {
+      window.requestAnimationFrame(Animate);
+      background.draw();
+      boundaries.forEach((boundary) => {
+        boundary.draw();
+      });
+      encounters.forEach((cell) => {
+        cell.draw();
+      });
+      player.draw();
+      foreground.draw();
+
+      let moving = true;
+      player.moving = false;
+
+      if (battle.initiated) {
+        gsap.to(overlayDivRef.current, {
+          opacity: 1,
+          repeat: 4,
+          duration: 0.4,
+          yoyo: true,
+          onComplete: () => {
+            return;
+          },
+        });
+      }
+
+      if (
+        keys.w.pressed ||
+        keys.a.pressed ||
+        keys.s.pressed ||
+        keys.d.pressed
+      ) {
+        for (let i = 0; i < encounters.length; i++) {
+          const encounter = encounters[i];
+          const overlappingArea =
+            (Math.min(
+              player.position.x + player.width,
+              encounter.position.x + encounter.width
+            ) -
+              Math.max(player.position.x, encounter.position.x)) *
+            (Math.min(
+              player.position.y + player.height,
+              encounter.position.y + encounter.height
+            ) -
+              Math.max(player.position.y, encounter.position.y));
+          if (
+            rectangularCollision({
+              rect1: player,
+              rect2: encounter,
+            }) &&
+            overlappingArea > (player.width * player.height) / 3 &&
+            Math.random() < 0.0075
+          ) {
+            //battle.initiated seems to stop movement on the SECOND trigger of a battle for some reason.
+            console.log("Activate Battle");
+            battle.initiated = true;
+            break;
+          }
+        }
+      }
+      if (keys.w.pressed && lastkey === "w") {
+        player.image = player.sprites.up;
+        player.moving = true;
+        for (let i = 0; i < boundaries.length; i++) {
+          const boundary = boundaries[i];
+          if (
+            rectangularCollision({
+              rect1: player,
+              rect2: {
+                ...boundary,
+                position: {
+                  x: boundary.position.x,
+                  y: boundary.position.y + 3,
+                },
+              },
+            })
+          ) {
+            moving = false;
+            break;
+          }
+        }
+
+        if (moving)
+          movables.forEach((movable) => {
+            movable.position.y += 3;
+          });
+      } else if (keys.a.pressed) {
+        player.image = player.sprites.left;
+        player.moving = true;
+        for (let i = 0; i < boundaries.length; i++) {
+          const boundary = boundaries[i];
+          if (
+            rectangularCollision({
+              rect1: player,
+              rect2: {
+                ...boundary,
+                position: {
+                  x: boundary.position.x + 3,
+                  y: boundary.position.y,
+                },
+              },
+            })
+          ) {
+            moving = false;
+            break;
+          }
+        }
+        if (moving)
+          movables.forEach((movable) => {
+            movable.position.x += 3;
+          });
+      } else if (keys.s.pressed) {
+        player.image = player.sprites.down;
+        player.moving = true;
+        for (let i = 0; i < boundaries.length; i++) {
+          const boundary = boundaries[i];
+          if (
+            rectangularCollision({
+              rect1: player,
+              rect2: {
+                ...boundary,
+                position: {
+                  x: boundary.position.x,
+                  y: boundary.position.y - 3,
+                },
+              },
+            })
+          ) {
+            moving = false;
+            break;
+          }
+        }
+        if (moving)
+          movables.forEach((movable) => {
+            movable.position.y -= 3;
+          });
+      } else if (keys.d.pressed) {
+        player.image = player.sprites.right;
+        player.moving = true;
+        for (let i = 0; i < boundaries.length; i++) {
+          const boundary = boundaries[i];
+          if (
+            rectangularCollision({
+              rect1: player,
+              rect2: {
+                ...boundary,
+                position: {
+                  x: boundary.position.x - 3,
+                  y: boundary.position.y,
+                },
+              },
+            })
+          ) {
+            moving = false;
+            break;
+          }
+        }
+        if (moving)
+          movables.forEach((movable) => {
+            movable.position.x -= 3;
+          });
+      }
+    }
+    Animate();
+
+    let lastkey = "";
+    window.addEventListener("keydown", (e) => {
+      switch (e.key) {
+        case "w":
+          keys.w.pressed = true;
+          lastkey = "w";
+          break;
+        case "a":
+          keys.a.pressed = true;
+          lastkey = "a";
+          break;
+        case "s":
+          keys.s.pressed = true;
+          lastkey = "s";
+          break;
+        case "d":
+          keys.d.pressed = true;
+          lastkey = "d";
+          break;
+        case "t":
+          console.log(collisions);
+          break;
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      switch (e.key) {
+        case "w":
+          keys.w.pressed = false;
+          break;
+        case "a":
+          keys.a.pressed = false;
+          break;
+        case "s":
+          keys.s.pressed = false;
+          break;
+        case "d":
+          keys.d.pressed = false;
+          break;
+      }
+    });
+  }, []);
+
   return (
-    <>
-      <Head>
-        <title>Create Next App</title>
-        <meta name="description" content="Generated by create next app" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-      <main className={styles.main}>
-        <div className={styles.description}>
-          <p>
-            Get started by editing&nbsp;
-            <code className={styles.code}>src/pages/index.js</code>
-          </p>
-          <div>
-            <a
-              href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              By{' '}
-              <Image
-                src="/vercel.svg"
-                alt="Vercel Logo"
-                className={styles.vercelLogo}
-                width={100}
-                height={24}
-                priority
-              />
-            </a>
-          </div>
-        </div>
+    <main className="h-screen w-full bg-slate-500 flex place-content-center flex-col justify-center gap-4">
+      <h1 className="flex place-content-center font-extrabold text-white text-4xl">
+        Tokemon!
+      </h1>
+      <div className="flex place-self-center flex-col place-content-center">
+        <div
+          ref={overlayDivRef}
+          className="bg-black flex h-[550px] w-[1094px] place-self-center absolute opacity-0 pointer-events-none"
+        ></div>
+        <canvas
+          className="flex place-self-center border-black border-2 rounded-md"
+          ref={canvasRef}
+          width={1094}
+          height={550}
+        ></canvas>
+      </div>
+    </main>
+  );
+};
 
-        <div className={styles.center}>
-          <Image
-            className={styles.logo}
-            src="/next.svg"
-            alt="Next.js Logo"
-            width={180}
-            height={37}
-            priority
-          />
-          <div className={styles.thirteen}>
-            <Image
-              src="/thirteen.svg"
-              alt="13"
-              width={40}
-              height={31}
-              priority
-            />
-          </div>
-        </div>
-
-        <div className={styles.grid}>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Docs <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Find in-depth information about Next.js features and&nbsp;API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Learn <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Learn about Next.js in an interactive course with&nbsp;quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Templates <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Discover and deploy boilerplate example Next.js&nbsp;projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Deploy <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Instantly deploy your Next.js site to a shareable URL
-              with&nbsp;Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-    </>
-  )
-}
+export default Canvas;
